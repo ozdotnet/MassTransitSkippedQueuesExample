@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using GreenPipes.Util;
 using MassTransit;
 
 namespace MassTransitSkippedQueuesExample
@@ -10,19 +7,14 @@ namespace MassTransitSkippedQueuesExample
     {
         private static IBusControl _mtBus;
 
-        static void Main(string[] args)
+        static void Main()
         {
-            CreateMtBus();
-
-            var requestClient = _mtBus.CreatePublishRequestClient<TestRequest, TestResponse>(TimeSpan.FromSeconds(5),TimeSpan.FromSeconds(5));
-
-            var response = requestClient.Request(new TestRequest());
-
-            string contentStr;
-
             try
             {
-                contentStr = response.Result.Content;
+                CreateMtBus();
+                var requestClient = _mtBus.CreatePublishRequestClient<TestRequest, TestResponse>(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+                var response = requestClient.Request(new TestRequest());
+                string contentStr = response.Result.Content;
             }
             catch (Exception e)
             {
@@ -34,50 +26,23 @@ namespace MassTransitSkippedQueuesExample
 
         public static void CreateMtBus()
         {
-            try
+            _mtBus = Bus.Factory.CreateUsingRabbitMq(busFactoryConfig =>
             {
-                _mtBus = Bus.Factory.CreateUsingRabbitMq(busFactoryConfig =>
+                var host = busFactoryConfig.Host(new Uri("rabbitmq://localhost/"), hostConfig =>
                 {
-                    var host = busFactoryConfig.Host(new Uri("rabbitmq://localhost/"), hostConfig =>
-                    {
-                        hostConfig.Username("guest");
-                        hostConfig.Password("guest");
-                    });
-
-                    busFactoryConfig.ReceiveEndpoint(host, receiveEndpointConfig =>
-                    {
-                        receiveEndpointConfig.Consumer<TestRequestConsumer>();
-                    });
+                    hostConfig.Username("guest");
+                    hostConfig.Password("guest");
                 });
 
-                _mtBus.Start();
+                busFactoryConfig.ReceiveEndpoint(host, receiveEndpointConfig =>
+                {
+                    receiveEndpointConfig.Consumer<TestRequestConsumer>();
+                });
+            });
 
-                Console.WriteLine("Publish Bus created.");
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine($"Error. {e}");
-            }
-        }
-    }
+            _mtBus.Start();
 
-    public class TestRequest
-    {
-
-    }
-
-    public class TestResponse
-    {
-        public string Content { get; set; }
-    }
-
-    public class TestRequestConsumer : IConsumer<TestRequest>
-    {
-        public Task Consume(ConsumeContext<TestRequest> context)
-        {
-            Thread.Sleep(TimeSpan.FromSeconds(10));
-
-            return context.RespondAsync(new TestResponse {Content = "Response from Consume method"});
+            Console.WriteLine("Publish Bus created.");
         }
     }
 }
